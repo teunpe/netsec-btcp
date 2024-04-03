@@ -1,0 +1,10 @@
+output.file
+testframework-output.file
+__pycache__
+btcp-project.pdf
+btcp-provided-src.zip
+FSMs-studentversion.pdf
+large_input.py
+
+# (Note to teachers:  please keep contents in sync with `src-impl/.gitignore`.)
+
