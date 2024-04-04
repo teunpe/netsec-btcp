@@ -4,6 +4,8 @@ from btcp.constants import *
 
 import queue
 import logging
+import random
+import time
 
 
 logger = logging.getLogger(__name__)
@@ -49,6 +51,12 @@ class BTCPClientSocket(BTCPSocket):
         # thread into the network thread. Bounded in size.
         self._sendbuf = queue.Queue(maxsize=1000)
         logger.info("Socket initialized with sendbuf size 1000")
+
+        self._isn = 0
+        self._seq = 0
+        self._ack = 0
+
+        self._timer = time.monotonic_ns(timeout*1000000)
 
 
     ###########################################################################
@@ -103,7 +111,37 @@ class BTCPClientSocket(BTCPSocket):
         each elif.
         """
         logger.debug("lossy_layer_segment_received called")
-        raise NotImplementedError("No implementation of lossy_layer_segment_received present. Read the comments & code of client_socket.py.")
+        header = segment[:10]
+        unpacked_header = self.unpack_segment_header(header)
+        seq, ack, flags, window, length, checksum = unpacked_header
+        # check checksum
+        synflag = flags[5]
+        ackflag = flags[6]
+        finflag = flags[7]
+        
+
+        match self._state:
+            case BTCPStates.CLOSED:
+                return
+            case BTCPStates.SYN_SENT:
+                if synflag & ackflag:
+                    if ack == self._isn + 1:
+                        self._ack = ack+1
+                        self._seq = ack
+                        self._state = BTCPStates.ESTABLISHED
+                return
+            case BTCPStates.ESTABLISHED:
+                if synflag | finflag:
+                    return
+                # TODO: andere error handling
+                
+
+
+
+
+
+       
+
 
 
     def lossy_layer_tick(self):
@@ -131,7 +169,6 @@ class BTCPClientSocket(BTCPSocket):
         lossy_layer_segment_received or lossy_layer_tick.
         """
         logger.debug("lossy_layer_tick called")
-        raise NotImplementedError("Only rudimentary implementation of lossy_layer_tick present. Read the comments & code of client_socket.py, then remove the NotImplementedError.")
 
         # Actually send all chunks available for sending.
         # Relies on an eventual exception to break from the loop when no data
@@ -184,7 +221,7 @@ class BTCPClientSocket(BTCPSocket):
     ### above.                                                              ###
     ###########################################################################
 
-    def connect(self):
+    def connect(self, attempt):
         """Perform the bTCP three-way handshake to establish a connection.
 
         connect should *block* (i.e. not return) until the connection has been
@@ -209,7 +246,23 @@ class BTCPClientSocket(BTCPSocket):
         this project.
         """
         logger.debug("connect called")
-        raise NotImplementedError("No implementation of connect present. Read the comments & code of client_socket.py.")
+        isn = random.randint(1, 32767) #initial sequence number between 1 and highest int with 15 bits minus one
+        self._isn = isn
+
+        header = self.build_segment_header(isn, isn, syn_set=True,checksum=0)
+        self.send(header)
+        self._state = BTCPStates.SYN_SENT
+        self._start_timer(self)
+        while self._state == BTCPStates.SYN_SENT & self._timer != None:
+             self._expire_timers()
+        if self._timer == None:
+            attempt += 1
+            return
+        header = self.build_segment_header(0,self._ack, ack_set=True)
+        self.send(header)
+        
+            
+
 
 
     def send(self, data):
@@ -240,7 +293,6 @@ class BTCPClientSocket(BTCPSocket):
         done later.
         """
         logger.debug("send called")
-        raise NotImplementedError("Only rudimentary implementation of send present. Read the comments & code of client_socket.py, then remove the NotImplementedError.")
 
         # Example with a finite buffer: a queue with at most 1000 chunks,
         # for a maximum of 985KiB data buffered to get turned into packets.
@@ -282,7 +334,6 @@ class BTCPClientSocket(BTCPSocket):
         more advanced thread synchronization in this project.
         """
         logger.debug("shutdown called")
-        raise NotImplementedError("No implementation of shutdown present. Read the comments & code of client_socket.py.")
 
 
     def close(self):

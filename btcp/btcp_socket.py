@@ -1,6 +1,7 @@
 import struct
 import logging
 from enum import IntEnum
+import time
 
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,7 @@ class BTCPSocket:
         self._state = BTCPStates.CLOSED
         logger.debug("Socket initialized with window %i and timeout %i",
                      self._window, self._timeout)
+        self._timer = None
 
 
     @staticmethod
@@ -122,5 +124,28 @@ class BTCPSocket:
         than make a separate method for every individual field.
         """
         logger.debug("unpack_segment_header() called")
-        raise NotImplementedError("No implementation of unpack_segment_header present. Read the comments & code of btcp_socket.py. You should really implement the packing / unpacking of the header into field values before doing anything else!")
+        seqnum, acknum, flag_byte, window, length, checksum = struct.unpack("!HHBBHH")
         logger.debug("unpack_segment_header() done")
+        return seqnum, acknum, flag_byte, window, length, checksum
+        
+    @staticmethod
+    def _start_example_timer(self):
+        if not self._example_timer:
+            logger.debug("Starting example timer.")
+            # Time in *nano*seconds, not milli- or microseconds.
+            # Using a monotonic clock ensures independence of weird stuff
+            # like leap seconds and timezone changes.
+            self._example_timer = time.monotonic_ns(self._timeout*1_000_000)
+        else:
+            logger.debug("Example timer already running.")
+
+
+    def _expire_timers(self):
+        curtime = time.monotonic_ns()
+        if not self._example_timer:
+            logger.debug("Example timer not running.")
+        elif curtime - self._example_timer > self._timeout * 1_000_000:
+            logger.debug("Example timer elapsed.")
+            self._example_timer = None
+        else:
+            logger.debug("Example timer not yet elapsed.")

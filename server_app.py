@@ -68,6 +68,7 @@ def btcp_file_transfer_server():
 
     logging.basicConfig(level=getattr(logging, args.loglevel.upper()),
                         format="%(asctime)s:%(name)s:%(levelname)s:%(message)s")
+    print('logger')
     logger.info("Set up logger")
 
     # Create a bTCP server socket

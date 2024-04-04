@@ -4,6 +4,7 @@ import argparse
 import time
 import logging
 from btcp.client_socket import BTCPClientSocket
+from btcp.btcp_socket import BTCPStates
 
 """This exposes a constant bytes object called TEST_BYTES_85MIB which, as the
 name suggests, is a little over 85 MiB in size. You can send it, receive it,
@@ -79,7 +80,8 @@ def btcp_file_transfer_client():
     # implementation relies on you starting the server before the client,
     # and just dumps the entire file into the network immediately.
     logger.info("Connecting")
-    s.connect()
+    while s._state != BTCPStates.ESTABLISHED:
+        s.connect()
     logger.info("Connected")
 
     # Actually open the file, read the file, and send the data.
