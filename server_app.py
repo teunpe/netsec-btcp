@@ -2,7 +2,7 @@
 
 import argparse
 import logging
-from btcp.server_socket import BTCPServerSocket
+from btcp.server_socket import BTCPServerSocket, BTCPStates
 
 """This exposes a constant bytes object called TEST_BYTES_85MIB which, as the
 name suggests, is a little over 85 MiB in size. You can send it, receive it,
@@ -16,7 +16,7 @@ You can also use the file large_input.py as-is for file transfer.
 """
 from large_input import TEST_BYTES_85MIB
 
-
+logging.basicConfig(filename='server.log', encoding='utf-8', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
@@ -80,9 +80,10 @@ def btcp_file_transfer_server():
     # client and just dumps all segment contents directly into a file. No
     # handshake is performed.
     logger.info("Accepting")
-    s.accept()
+    while s._state == BTCPStates.CLOSED:
+        s.accept()
     logger.info("Accepted(?)")
-
+    print('connected')
     # Actually open the output file. Warning: will overwrite existing files.
     logger.info("Opening file")
     with open(args.output, 'wb') as outfile:

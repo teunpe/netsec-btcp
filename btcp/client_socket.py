@@ -56,7 +56,7 @@ class BTCPClientSocket(BTCPSocket):
         self._seq = 0
         self._ack = 0
 
-        self._timer = time.monotonic_ns(timeout*1000000)
+        self._attempt = 0
 
 
     ###########################################################################
@@ -115,25 +115,28 @@ class BTCPClientSocket(BTCPSocket):
         unpacked_header = self.unpack_segment_header(header)
         seq, ack, flags, window, length, checksum = unpacked_header
         # check checksum
-        synflag = flags[5]
-        ackflag = flags[6]
-        finflag = flags[7]
+        synflag = flags[0]
+        ackflag = flags[1]
+        finflag = flags[2]
         
-
         match self._state:
             case BTCPStates.CLOSED:
                 return
             case BTCPStates.SYN_SENT:
-                if synflag & ackflag:
-                    if ack == self._isn + 1:
-                        self._ack = ack+1
+                if synflag and ackflag:
+                    print(ack, self._isn)
+                    if ack == self._isn:
+                        self._ack = ack
                         self._seq = ack
                         self._state = BTCPStates.ESTABLISHED
+                        print(self._state)
                 return
             case BTCPStates.ESTABLISHED:
-                if synflag | finflag:
+                if synflag or finflag:
                     return
                 # TODO: andere error handling
+        
+            
                 
 
 
@@ -221,7 +224,7 @@ class BTCPClientSocket(BTCPSocket):
     ### above.                                                              ###
     ###########################################################################
 
-    def connect(self, attempt):
+    def connect(self):
         """Perform the bTCP three-way handshake to establish a connection.
 
         connect should *block* (i.e. not return) until the connection has been
@@ -249,17 +252,34 @@ class BTCPClientSocket(BTCPSocket):
         isn = random.randint(1, 32767) #initial sequence number between 1 and highest int with 15 bits minus one
         self._isn = isn
 
-        header = self.build_segment_header(isn, isn, syn_set=True,checksum=0)
-        self.send(header)
+        #send syn to server
+        header = self.build_segment_header(isn, isn+1, syn_set=True,checksum=0)
+        padding = b'\x00' * PAYLOAD_SIZE
+        segment = header + padding
+        self._lossy_layer.send_segment(segment)
         self._state = BTCPStates.SYN_SENT
+
         self._start_timer(self)
-        while self._state == BTCPStates.SYN_SENT & self._timer != None:
-             self._expire_timers()
-        if self._timer == None:
-            attempt += 1
-            return
+        #wait until syn ack is received
+        print('waiting for syn ack')
+        while self._state == BTCPStates.SYN_SENT:
+            if self._timer is not None:
+                self._expire_timers()
+                time.sleep(0.0001) #sleep for 0.1 ms to reduce cpu time use
+            else:
+                if self._attempt == 10:
+                    # print('connect timed out')
+                    self._state == BTCPStates.CLOSED
+                    self._attempt = 0
+                else:
+                    self._attempt += 1
+                    self._start_timer(self)
+        print('connected')
+        #if loop exits while the timer is active, syn ack is received so client sends ack to complete handshake
         header = self.build_segment_header(0,self._ack, ack_set=True)
-        self.send(header)
+        segment = header + padding
+        self._lossy_layer.send_segment(segment)
+        logger.debug('connect succeeded')
         
             
 

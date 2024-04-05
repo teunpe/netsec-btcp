@@ -63,6 +63,11 @@ class BTCPServerSocket(BTCPSocket):
         # Make sure the example timer exists from the start.
         self._example_timer = None
 
+        self._ack = 0
+        self._seq = 0
+        self._attempt = 0
+
+
 
     ###########################################################################
     ### The following section is the interface between the transport layer  ###
@@ -130,6 +135,9 @@ class BTCPServerSocket(BTCPSocket):
         match self._state:
             case BTCPStates.CLOSED:
                 self._closed_segment_received(segment)
+            case BTCPStates.ACCEPTING | BTCPStates.SYN_RCVD:
+                print('accepting segment')
+                self._accepting_segment_received(segment)
             case BTCPStates.CLOSING:
                 self._closing_segment_received(segment)
             case _:
@@ -148,7 +156,38 @@ class BTCPServerSocket(BTCPSocket):
 
         self._expire_timers()
         return
+    
+    def _accepting_segment_received(self, segment):
+        logger.debug("_accepting_segment_received called")
+        header = segment[:10]
+        unpacked_header = self.unpack_segment_header(header)
+        seq, ack, flags, window, length, checksum = unpacked_header
 
+        flagsize = len(flags)
+        if flagsize == 3:
+            synflag = flags[0]
+            ackflag = flags[1]
+            finflag = flags[2]
+        elif flagsize ==2:
+            synflag = 0
+            ackflag = flags[0]
+            finflag = flags[1]
+        elif flagsize ==1:
+            synflag = 0
+            ackflag = 0
+            finflag = int(flags)
+        # if syn is received, reply syn ack
+        if synflag:
+            logger.debug('syn received')
+            self._state = BTCPStates.SYN_RCVD
+            self._ack = seq+length
+            self._seq = seq+1
+            return
+
+        if ackflag:
+            logger.debug('ack received')
+            self._state = BTCPStates.ESTABLISHED
+            print('connected')
 
     def _closed_segment_received(self, segment):
         """Helper method handling received segment in CLOSED state
@@ -301,9 +340,55 @@ class BTCPServerSocket(BTCPSocket):
 
         We do not think you will need more advanced thread synchronization in
         this project.
+        TODO: recv same SYN | send SYN ACK
         """
         logger.debug("accept called")
-        pass
+        if self._state == BTCPStates.CLOSED:
+            self._state = BTCPStates.ACCEPTING
+        if self._state == BTCPStates.ESTABLISHED:
+            return
+        print('waiting for syn')
+        while self._state == BTCPStates.ACCEPTING:
+            time.sleep(0.0001) #wait for 0.1 ms to reduce cpu time
+        print('sending syn ack')
+        # if syn is received, send syn ack 
+        header = self.build_segment_header(self._seq, self._ack, syn_set=True, ack_set=True)
+        padding = b'\x00' * PAYLOAD_SIZE
+        segment = header + padding
+        self._lossy_layer.send_segment(segment)
+        print('waiting for ack')
+        # and wait for ack
+        self._start_timer(self)
+        while self._state == BTCPStates.SYN_RCVD:
+            if self._timer is not None:
+                self._expire_timers()
+                time.sleep(0.0001)
+            else: 
+                if self._attempt == 10:
+                    self._state = BTCPStates.ACCEPTING
+                    self._attempt = 0
+                    self.accept()
+                    return
+                else: 
+                    self._attempt += 1
+                    self._start_timer(self)
+        print('here')
+        if self._state == BTCPStates.ESTABLISHED:
+            print('established')
+            return
+        else: self.accept()
+
+
+            
+
+        # if the timer ran out, resend the syn ack by starting the accept again
+        # since the state is set to SYN_RCVD the server skips waiting for the syn 
+        if self._timer is None:
+            self._state = BTCPStates.SYN_RCVD
+            return 
+        
+        self._state = BTCPStates.ESTABLISHED        
+        return 1
 
 
     def recv(self):

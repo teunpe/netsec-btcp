@@ -18,7 +18,7 @@ You can also use the file large_input.py as-is for file transfer.
 """
 from large_input import TEST_BYTES_85MIB
 
-
+logging.basicConfig(filename='client.log', encoding='utf-8', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
@@ -56,7 +56,7 @@ def btcp_file_transfer_client():
                         type=int, default=100)
     parser.add_argument("-t", "--timeout",
                         help="Define bTCP timeout in milliseconds",
-                        type=int, default=100)
+                        type=int, default=00)
     parser.add_argument("-i", "--input",
                         help="File to send",
                         default="large_input.py")
@@ -80,8 +80,7 @@ def btcp_file_transfer_client():
     # implementation relies on you starting the server before the client,
     # and just dumps the entire file into the network immediately.
     logger.info("Connecting")
-    while s._state != BTCPStates.ESTABLISHED:
-        s.connect()
+    s.connect()
     logger.info("Connected")
 
     # Actually open the file, read the file, and send the data.

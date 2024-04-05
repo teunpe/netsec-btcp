@@ -124,28 +124,32 @@ class BTCPSocket:
         than make a separate method for every individual field.
         """
         logger.debug("unpack_segment_header() called")
-        seqnum, acknum, flag_byte, window, length, checksum = struct.unpack("!HHBBHH")
+        seqnum, acknum, flag_byte, window, length, checksum = struct.unpack("!HHBBHH", header)
+        flags = "{0:b}".format(flag_byte)
         logger.debug("unpack_segment_header() done")
-        return seqnum, acknum, flag_byte, window, length, checksum
+        return seqnum, acknum, flags, window, length, checksum
         
     @staticmethod
-    def _start_example_timer(self):
-        if not self._example_timer:
-            logger.debug("Starting example timer.")
+    def _start_timer(self):
+        if not self._timer:
+            # logger.debug("Starting example timer.")
             # Time in *nano*seconds, not milli- or microseconds.
             # Using a monotonic clock ensures independence of weird stuff
             # like leap seconds and timezone changes.
-            self._example_timer = time.monotonic_ns(self._timeout*1_000_000)
+            self._timer = time.monotonic_ns()
         else:
-            logger.debug("Example timer already running.")
+            pass
+            # logger.debug("Example timer already running.")
 
 
     def _expire_timers(self):
         curtime = time.monotonic_ns()
-        if not self._example_timer:
-            logger.debug("Example timer not running.")
-        elif curtime - self._example_timer > self._timeout * 1_000_000:
-            logger.debug("Example timer elapsed.")
-            self._example_timer = None
+        if not self._timer:
+            # logger.debug("Example timer not running.")
+            pass
+        elif curtime - self._timer > self._timeout * 1_000_000:
+            # logger.debug("Example timer elapsed.")
+            self._timer = None
         else:
-            logger.debug("Example timer not yet elapsed.")
+            # logger.debug("Example timer not yet elapsed.")
+            pass
