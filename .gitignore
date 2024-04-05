@@ -5,6 +5,9 @@ btcp-project.pdf
 btcp-provided-src.zip
 FSMs-studentversion.pdf
 large_input.py
+server.log
+client.log
+output.file
 
 # (Note to teachers:  please keep contents in sync with `src-impl/.gitignore`.)
 
