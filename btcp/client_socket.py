@@ -77,12 +77,12 @@ class BTCPClientSocket(BTCPSocket):
 
         Things you should expect to handle here (or in helper methods called
         from here):
-            - checksum verification (and deciding what to do if it fails)
+            - TODO: checksum verification (and deciding what to do if it fails)
             - receiving syn/ack during handshake
-            - receiving ack and registering the corresponding segment as being
+            - TODO: receiving ack and registering the corresponding segment as being
               acknowledged
             - receiving fin/ack during termination
-            - any other handling of the header received from the server
+            - TODO: any other handling of the header received from the server
 
         Remember, we expect you to implement this *as a state machine!*
         You have quite a bit of freedom in how you do this, but we at least
@@ -114,12 +114,9 @@ class BTCPClientSocket(BTCPSocket):
         logger.debug("lossy_layer_segment_received called")
         header = segment[:10]
         unpacked_header = self.unpack_segment_header(header)
-        seq, ack, flags, window, length, checksum = unpacked_header
-        # check checksum
-        synflag = flags[0]
-        ackflag = flags[1]
-        finflag = flags[2]
-        
+        seq, ack, (synflag, ackflag, finflag), window, length, checksum = unpacked_header
+        # TODO: check checksum
+
         match self._state:
             case BTCPStates.CLOSED:
                 return
@@ -139,7 +136,6 @@ class BTCPClientSocket(BTCPSocket):
 
             case BTCPStates.FIN_SENT:
                 logger.info('recieved segment in state FIN_SENT')
-                logger.info(flags)
                 if ackflag: 
                     logger.info('fin ack received')
                     self._finack = 1
@@ -253,12 +249,11 @@ class BTCPClientSocket(BTCPSocket):
         """
         logger.debug("connect called")
         isn = random.randint(1, 32767) #initial sequence number between 1 and highest int with 15 bits minus one
-        self._isn = isn
+        self._isn = isn #TODO: seq number should loop to 0 after overflow
 
-        #send syn to server
+        #send syn to server and update state
         header = self.build_segment_header(isn, isn+1, syn_set=True,checksum=0)
-        padding = b'\x00' * PAYLOAD_SIZE
-        segment = header + padding
+        segment = self.build_segment(header)
         self._lossy_layer.send_segment(segment)
         self._state = BTCPStates.SYN_SENT
 
@@ -280,7 +275,7 @@ class BTCPClientSocket(BTCPSocket):
         print('connected')
         #if loop exits while the timer is active, syn ack is received so client sends ack to complete handshake
         header = self.build_segment_header(0,self._ack, ack_set=True)
-        segment = header + padding
+        segment = self.build_segment(header)
         self._lossy_layer.send_segment(segment)
         logger.info('connect succeeded')
         
@@ -289,7 +284,7 @@ class BTCPClientSocket(BTCPSocket):
 
 
     def send(self, data):
-        """Send data originating from the application in a reliable way to the
+        """TODO: Send data originating from the application in a reliable way to the
         server.
 
         This method should *NOT* block waiting for acknowledgement of the data.
@@ -358,19 +353,19 @@ class BTCPClientSocket(BTCPSocket):
         boolean or enum has the expected value. We do not think you will need
         more advanced thread synchronization in this project.
         """
-        logger.info(f'here: {self._state}')
+
+        #if the connection is already closed, return (to exit recursion from timeouts)
         if self._state == BTCPStates.CLOSED:
-            logger.info('check')
             return
+        
         logger.info("shutdown called")
+
         # send FIN
         header = self.build_segment_header(self._seq, 0, fin_set=True)
         segment = self.build_segment(header)
         self._lossy_layer.send_segment(segment)
 
-        if self._state != BTCPStates.CLOSED:
-            self._state = BTCPStates.FIN_SENT
-
+        # wait for FIN ACK
         self._start_timer(self)
         logger.info('waiting for fin ack')
         while self._state == BTCPStates.FIN_SENT:
@@ -378,7 +373,10 @@ class BTCPClientSocket(BTCPSocket):
                 self._expire_timers()
                 time.sleep(0.0001)
             else:
+                # restart shutdown procedure if timed out
                 return self.shutdown(attempt+1)
+            
+
         logger.info('shutting down')
         # if ack fin is received, send ack, wait and close
         header = self.build_segment_header(0, self._ack, ack_set=True)
@@ -390,7 +388,7 @@ class BTCPClientSocket(BTCPSocket):
                 self._expire_timers()
                 time.sleep(0.0001)
             else:
-                return self.shutdown(attempt+1)
+                break
         
         return
 
