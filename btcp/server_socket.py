@@ -136,7 +136,7 @@ class BTCPServerSocket(BTCPSocket):
             case BTCPStates.CLOSED:
                 self._closed_segment_received(segment)
             case BTCPStates.ACCEPTING | BTCPStates.SYN_RCVD:
-                print('accepting segment')
+                logger.info('accepting segment')
                 self._accepting_segment_received(segment)
             case BTCPStates.CLOSING:
                 self._closing_segment_received(segment)
@@ -176,7 +176,7 @@ class BTCPServerSocket(BTCPSocket):
         if ackflag:
             logger.debug('ack received')
             self._state = BTCPStates.ESTABLISHED
-            print('connected')
+            logger.info('connected')
 
     def _closed_segment_received(self, segment):
         """Helper method handling received segment in CLOSED state
@@ -213,8 +213,19 @@ class BTCPServerSocket(BTCPSocket):
         """
         logger.debug("_closing_segment_received called")
         logger.info("Segment received in CLOSING state.")
-        logger.info("This needs to be properly implemented. "
-                    "Currently only here for demonstration purposes.")
+        
+        header = segment[:10]
+        unpacked_header = self.unpack_segment_header(header)
+
+        seq, ack, flags, window, length, checksum = unpacked_header
+
+        synflag = flags[0]
+        ackflag = flags[1]
+        finflag = flags[2]
+        logger.info(flags)
+
+        if ackflag:
+            self._state == BTCPStates.CLOSED
         
     def _established_segment_received(self, segment):
         logger.debug("_accepting_segment_received called")
@@ -233,8 +244,9 @@ class BTCPServerSocket(BTCPSocket):
             return
         
         if finflag:
+            logger.info('finflag')
             self._state = BTCPStates.CLOSING
-            self.close()
+            self.shutdown()
             return
         
         chunk = segment[HEADER_SIZE:HEADER_SIZE + length]
@@ -380,16 +392,16 @@ class BTCPServerSocket(BTCPSocket):
             self._state = BTCPStates.ACCEPTING
         if self._state == BTCPStates.ESTABLISHED:
             return
-        print('waiting for syn')
+        logger.info('waiting for syn')
         while self._state == BTCPStates.ACCEPTING:
             time.sleep(0.0001) #wait for 0.1 ms to reduce cpu time
-        print('sending syn ack')
+        logger.info('sending syn ack')
         # if syn is received, send syn ack 
         header = self.build_segment_header(self._seq, self._ack, syn_set=True, ack_set=True)
         padding = b'\x00' * PAYLOAD_SIZE
         segment = header + padding
         self._lossy_layer.send_segment(segment)
-        print('waiting for ack')
+        logger.info('waiting for ack')
         # and wait for ack
         self._start_timer(self)
         while self._state == BTCPStates.SYN_RCVD:
@@ -405,9 +417,9 @@ class BTCPServerSocket(BTCPSocket):
                 else: 
                     self._attempt += 1
                     self._start_timer(self)
-        print('here')
+        logger.info('here')
         if self._state == BTCPStates.ESTABLISHED:
-            print('established')
+            logger.info('established')
             return
         else: self.accept()
 
@@ -450,10 +462,7 @@ class BTCPServerSocket(BTCPSocket):
         The actual receiving of the data, i.e. reading the segments, sending
         acknowledgements for them, reordering them, etc., happens *outside* of
         the recv method (e.g. in the network thread).
-        Because of this blocking behaviour, an *empty* result from recv signals
-        that the connection has been terminated.
-
-        Again, you should feel free to deviate from how this usually works.
+        Because of this blocking behaviour, an *empty* result fromESTABLISHEDly works.
         """
         logger.debug("recv called")
 
@@ -490,6 +499,35 @@ class BTCPServerSocket(BTCPSocket):
             logger.info("No data received for 30 seconds.")
             logger.info("Returning empty bytes to caller, signalling disconnect.")
         return bytes(data)
+
+    def shutdown(self):
+        logger.debug("shutdown called")
+        # send ack
+        header = self.build_segment_header(0,self._ack, ack_set=True)
+        segment = self.build_segment(header)
+        self._lossy_layer.send_segment(segment)
+
+        # send fin
+        header = self.build_segment_header(0, 0, fin_set=True)
+        segment = self.build_segment(header)
+        self._lossy_layer.send_segment(segment)
+
+        logger.debug("waiting for ack")
+        self._start_timer(self)
+        while self._state == BTCPStates.CLOSING:
+            logger.info(self._timer)
+            if not self._timer:
+                self._expire_timers()
+                time.sleep(0.0001)
+            else:
+                logger.info('closing after timeout')
+                self._state = BTCPStates.CLOSED
+                return
+        
+        # if this exits, the connection is closed
+        logger.info('closed')
+
+
 
 
     def close(self):

@@ -14,9 +14,9 @@ reference. Python itself will run it fine, though.
 
 You can also use the file large_input.py as-is for file transfer.
 """
-from large_input import TEST_BYTES_85MIB
+# from large_input import TEST_BYTES_85MIB
 
-logging.basicConfig(filename='server.log', encoding='utf-8', level=logging.DEBUG)
+logging.basicConfig(filename='server.log', encoding='utf-8', level=logging.DEBUG, filemode='w')
 logger = logging.getLogger(__name__)
 
 
@@ -93,17 +93,24 @@ def btcp_file_transfer_server():
         # while recvdata := s.recv():
         logger.info("Receiving first chunk.")
         recvdata = s.recv()
+        failed = 0
         while recvdata:
+            print(s._state)
             logger.info("Writing chunk to output.")
             outfile.write(recvdata)
             # Read new data from the socket.
             logger.info("Receiving next chunk.")
             recvdata = s.recv()
+            if s._state == BTCPStates.CLOSED:
+                failed = 1
         # In our current implementation, an empty bytes object returned by
         # recv indicates disconnection, so if we exit the loop we can assume
         # disconnection. We then exit the with-block, automatically closing the
         # output file.
-        logger.info("All chunks received")
+        if failed:
+            logger.info("Connection closed before all chunks received")
+        else: 
+            logger.info("All chunks received")
 
     # Clean up any state
     logger.info("Calling close")

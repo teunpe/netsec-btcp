@@ -16,9 +16,9 @@ reference. Python itself will run it fine, though.
 
 You can also use the file large_input.py as-is for file transfer.
 """
-from large_input import TEST_BYTES_85MIB
+# from large_input import TEST_BYTES_85MIB
 
-logging.basicConfig(filename='client.log', encoding='utf-8', level=logging.DEBUG)
+logging.basicConfig(filename='client.log', encoding='utf-8', level=logging.DEBUG, filemode='w')
 logger = logging.getLogger(__name__)
 
 
@@ -120,7 +120,7 @@ def btcp_file_transfer_client():
     # Disconnect, since we're done reading the file and done sending.
     # Note that by default this doesn't do *anything*.
     logger.info("Calling shutdown")
-    s.shutdown()
+    s.shutdown(0)
 
     # Clean up any state
     logger.info("Calling close")

@@ -115,7 +115,8 @@ class BTCPSocket:
         return struct.pack("!HHBBHH",
                            seqnum, acknum, flag_byte, window, length, checksum)
     
-    def build_segment(header, data=[]):
+    @staticmethod
+    def build_segment(header, data=b''):
         padding = b'\x00' * (PAYLOAD_SIZE - len(data))
         segment = header + data + padding
         return segment

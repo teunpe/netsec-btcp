@@ -55,6 +55,7 @@ class BTCPClientSocket(BTCPSocket):
         self._isn = 0
         self._seq = 0
         self._ack = 0
+        self._finack = 0
 
         self._attempt = 0
 
@@ -135,16 +136,18 @@ class BTCPClientSocket(BTCPSocket):
                 if synflag or finflag:
                     return
                 # TODO: andere error handling
-        
-            
-                
 
-
-
-
-
-       
-
+            case BTCPStates.FIN_SENT:
+                logger.info('recieved segment in state FIN_SENT')
+                logger.info(flags)
+                if ackflag: 
+                    logger.info('fin ack received')
+                    self._finack = 1
+                    return
+                if finflag and self._finack:
+                    logger.info('fin received')
+                    self._state = BTCPStates.CLOSED
+                    logger.info(self._state)
 
 
     def lossy_layer_tick(self):
@@ -279,7 +282,7 @@ class BTCPClientSocket(BTCPSocket):
         header = self.build_segment_header(0,self._ack, ack_set=True)
         segment = header + padding
         self._lossy_layer.send_segment(segment)
-        logger.debug('connect succeeded')
+        logger.info('connect succeeded')
         
             
 
@@ -338,12 +341,14 @@ class BTCPClientSocket(BTCPSocket):
         return sent_bytes
 
 
-    def shutdown(self):
+    def shutdown(self, attempt):
         """Perform the bTCP three-way finish to shutdown the connection.
 
         shutdown should *block* (i.e. not return) until the connection has been
         successfully terminated or the disconnect attempt is aborted. You will
         need some coordination between the application thread and the network
+            else:
+                if attempt == 10:
         thread for this, because the fin/ack from the server will be received
         in the network thread.
 
@@ -353,7 +358,41 @@ class BTCPClientSocket(BTCPSocket):
         boolean or enum has the expected value. We do not think you will need
         more advanced thread synchronization in this project.
         """
-        logger.debug("shutdown called")
+        logger.info(f'here: {self._state}')
+        if self._state == BTCPStates.CLOSED:
+            logger.info('check')
+            return
+        logger.info("shutdown called")
+        # send FIN
+        header = self.build_segment_header(self._seq, 0, fin_set=True)
+        segment = self.build_segment(header)
+        self._lossy_layer.send_segment(segment)
+
+        if self._state != BTCPStates.CLOSED:
+            self._state = BTCPStates.FIN_SENT
+
+        self._start_timer(self)
+        logger.info('waiting for fin ack')
+        while self._state == BTCPStates.FIN_SENT:
+            if self._timer is not None:
+                self._expire_timers()
+                time.sleep(0.0001)
+            else:
+                return self.shutdown(attempt+1)
+        logger.info('shutting down')
+        # if ack fin is received, send ack, wait and close
+        header = self.build_segment_header(0, self._ack, ack_set=True)
+        segment = self.build_segment(header)
+        self._lossy_layer.send_segment(segment)
+
+        while self._state == BTCPStates.CLOSED:
+            if self._timer is not None:
+                self._expire_timers()
+                time.sleep(0.0001)
+            else:
+                return self.shutdown(attempt+1)
+        
+        return
 
 
     def close(self):
