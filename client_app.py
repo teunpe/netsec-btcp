@@ -59,7 +59,7 @@ def btcp_file_transfer_client():
                         type=int, default=00)
     parser.add_argument("-i", "--input",
                         help="File to send",
-                        default="large_input.py")
+                        default="small_input.py")
     parser.add_argument("-l", "--loglevel",
                         choices=["DEBUG", "INFO", "WARNING",
                                  "ERROR", "CRITICAL"],
@@ -82,7 +82,6 @@ def btcp_file_transfer_client():
     logger.info("Connecting")
     s.connect()
     logger.info("Connected")
-
     # Actually open the file, read the file, and send the data.
     logger.info("Opening file")
     with open(args.input, 'rb') as infile:

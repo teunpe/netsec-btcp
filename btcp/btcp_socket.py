@@ -2,6 +2,7 @@ import struct
 import logging
 from enum import IntEnum
 import time
+from btcp.constants import *
 
 
 logger = logging.getLogger(__name__)
@@ -113,6 +114,11 @@ class BTCPSocket:
         logger.debug("build_segment_header() done")
         return struct.pack("!HHBBHH",
                            seqnum, acknum, flag_byte, window, length, checksum)
+    
+    def build_segment(header, data=[]):
+        padding = b'\x00' * (PAYLOAD_SIZE - len(data))
+        segment = header + data + padding
+        return segment
 
 
     @staticmethod
@@ -126,8 +132,22 @@ class BTCPSocket:
         logger.debug("unpack_segment_header() called")
         seqnum, acknum, flag_byte, window, length, checksum = struct.unpack("!HHBBHH", header)
         flags = "{0:b}".format(flag_byte)
+        flagsize = len(flags)
+        if flagsize == 3:
+            synflag = flags[0]
+            ackflag = flags[1]
+            finflag = flags[2]
+        elif flagsize ==2:
+            synflag = 0
+            ackflag = flags[0]
+            finflag = flags[1]
+        elif flagsize ==1:
+            synflag = 0
+            ackflag = 0
+            finflag = int(flags)
+        
         logger.debug("unpack_segment_header() done")
-        return seqnum, acknum, flags, window, length, checksum
+        return seqnum, acknum, (synflag, ackflag, finflag), window, length, checksum
         
     @staticmethod
     def _start_timer(self):
