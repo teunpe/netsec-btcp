@@ -354,10 +354,13 @@ class BTCPClientSocket(BTCPSocket):
         more advanced thread synchronization in this project.
         """
 
+
+
         #if the connection is already closed, return (to exit recursion from timeouts)
         if self._state == BTCPStates.CLOSED:
             return
-        
+        while self._sendbuf.not_empty:
+            self.lossy_layer_tick()
         logger.info("shutdown called")
 
         # send FIN
